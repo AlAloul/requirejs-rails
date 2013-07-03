@@ -25,7 +25,7 @@ module RequirejsHelper
 
   def requirejs_include_tag(name=nil, &block)
     html = ""
-    html.concat require_js_config(name, &block)
+    html.concat requirejs_config(name, &block)
 
     _once_guard do
       html.concat <<-HTML
@@ -36,12 +36,12 @@ module RequirejsHelper
     end
   end
 
-  def require_js_config(name=nil, &block)
+  def requirejs_config(name=nil, &block)
     requirejs = Rails.application.config.requirejs
 
     if requirejs.loader == :almond
       name = requirejs.module_name_for(requirejs.build_config['modules'][0])
-      return _almond_include_tag(name, &block)
+      return _almond_include_tag(name, &block).html_safe
     end
 
     unless requirejs.run_config.empty?
@@ -69,9 +69,7 @@ module RequirejsHelper
       end
 
       run_config['baseUrl'] = baseUrl(name)
-      return <<-HTML
-      <script>var require = #{run_config.to_json};</script>
-      HTML
+      return "<script>var require = #{run_config.to_json};</script>".html_safe
     end
 
     return ''
