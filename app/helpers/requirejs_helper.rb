@@ -24,6 +24,19 @@ module RequirejsHelper
   end
 
   def requirejs_include_tag(name=nil, &block)
+    html = ""
+    html.concat require_js_config(name, &block)
+
+    _once_guard do
+      html.concat <<-HTML
+      <script #{_requirejs_data(name, &block)} src="#{_javascript_path 'require.js'}"></script>
+      HTML
+
+      html.html_safe
+    end
+  end
+
+  def require_js_config(name=nil, &block)
     requirejs = Rails.application.config.requirejs
 
     if requirejs.loader == :almond
@@ -31,45 +44,37 @@ module RequirejsHelper
       return _almond_include_tag(name, &block)
     end
 
-    html = ""
+    unless requirejs.run_config.empty?
+      run_config = requirejs.run_config.dup
+      unless _priority.empty?
+        run_config = run_config.dup
+        run_config[:priority] ||= []
+        run_config[:priority].concat _priority
+      end
+      if Rails.application.config.assets.digest
+        modules = requirejs.build_config['modules'].map { |m| requirejs.module_name_for m }
 
-    _once_guard do
-      unless requirejs.run_config.empty?
-        run_config = requirejs.run_config.dup
-        unless _priority.empty?
-          run_config = run_config.dup
-          run_config[:priority] ||= []
-          run_config[:priority].concat _priority
-        end
-        if Rails.application.config.assets.digest
-          modules = requirejs.build_config['modules'].map { |m| requirejs.module_name_for m }
+        # Generate digestified paths from the modules spec
+        paths = {}
+        modules.each { |m| paths[m] = _javascript_path(m).sub /\.js$/,'' }
 
-          # Generate digestified paths from the modules spec
-          paths = {}
-          modules.each { |m| paths[m] = _javascript_path(m).sub /\.js$/,'' }
-
-          if run_config.has_key? 'paths'
-            # Add paths for assets specified by full URL (on a CDN)
-            run_config['paths'].each { |k,v| paths[k] = v if v =~ /^https?:/ }
-          end
-
-          # Override user paths, whose mappings are only relevant in dev mode
-          # and in the build_config.
-          run_config['paths'] = paths
+        if run_config.has_key? 'paths'
+          # Add paths for assets specified by full URL (on a CDN)
+          run_config['paths'].each { |k,v| paths[k] = v if v =~ /^https?:/ }
         end
 
-        run_config['baseUrl'] = baseUrl(name)
-        html.concat <<-HTML
-        <script>var require = #{run_config.to_json};</script>
-        HTML
+        # Override user paths, whose mappings are only relevant in dev mode
+        # and in the build_config.
+        run_config['paths'] = paths
       end
 
-      html.concat <<-HTML
-      <script #{_requirejs_data(name, &block)} src="#{_javascript_path 'require.js'}"></script>
+      run_config['baseUrl'] = baseUrl(name)
+      return <<-HTML
+      <script>var require = #{run_config.to_json};</script>
       HTML
-
-      html.html_safe
     end
+
+    return ''
   end
 
   def _once_guard
